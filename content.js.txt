@@ -1,44 +1,104 @@
-// Scan page content for phishing signals
-function scanPageContent() {
-  let threats = 0;
-  
-  // 1. Check for hidden frames (Invisible iframes)
-  const iframes = document.getElementsByTagName('iframe');
-  for (let iframe of iframes) {
-    if (iframe.style.display === 'none' || iframe.style.visibility === 'hidden') {
-      threats++;
-    }
-  }
-  
-  // 2. Check for suspicious forms (e.g., action sends data to different domain)
-  const forms = document.getElementsByTagName('form');
-  for (let form of forms) {
-    if (form.action && !form.action.includes(window.location.hostname)) {
-      threats++;
-    }
-  }
-  
-  return threats > 0;
+function getRiskScore() {
+  const url = window.location.href.toLowerCase();
+  const hostname = window.location.hostname.toLowerCase();
+  let score = 0;
+
+  const riskyKeywords = [
+    "login", "verify", "secure", "account",
+    "update", "bank", "wallet", "password",
+    "signin", "auth"
+  ];
+
+  riskyKeywords.forEach(keyword => {
+    if (url.includes(keyword)) score += 2;
+  });
+
+  // Too long domain
+  if (hostname.length > 25) score += 2;
+
+  // Too many subdomains
+  if (hostname.split(".").length > 3) score += 2;
+
+  // Suspicious characters
+  if (url.includes("@") || url.includes("-")) score += 1;
+
+  return score;
 }
 
-// Receive messages from background script
-chrome.runtime.onMessage.addListener((request) => {
-  if (request.action === "showWarning" || scanPageContent()) {
-    displayWarningBanner(request.reason || "Suspicious page content detected.");
-  }
-});
+function detectLookalikeDomain() {
+  const hostname = window.location.hostname;
 
-// UI: Inject warning banner
-function displayWarningBanner(message) {
-  if (document.getElementById('phish-banner')) return;
-  
-  const banner = document.createElement('div');
-  banner.id = 'phish-banner';
-  banner.style.cssText = `
-    position: fixed; top: 0; left: 0; width: 100%; height: 50px;
-    background-color: red; color: white; text-align: center;
-    z-index: 99999; font-size: 20px; padding-top: 10px;
-  `;
-  banner.innerText = `⚠️ WARNING: ${message} DO NOT ENTER CREDENTIALS.`;
-  document.body.prepend(banner);
+  const popularTargets = [
+    "google", "facebook", "apple",
+    "microsoft", "amazon", "paypal"
+  ];
+
+  for (let brand of popularTargets) {
+    if (
+      hostname.includes(brand) &&
+      hostname !== `${brand}.com` &&
+      !hostname.endsWith(`.${brand}.com`)
+    ) {
+      return brand;
+    }
+  }
+
+  return null;
 }
+
+function detectInsecurePassword() {
+  const passwordField = document.querySelector("input[type='password']");
+  if (!passwordField) return false;
+
+  if (window.location.protocol !== "https:") {
+    return true;
+  }
+
+  return false;
+}
+
+function showWarning(message) {
+  if (document.getElementById("spoof-warning")) return;
+
+  const banner = document.createElement("div");
+  banner.id = "spoof-warning";
+  banner.innerText = `⚠ SECURITY ALERT: ${message}`;
+
+  Object.assign(banner.style, {
+    position: "fixed",
+    top: "0",
+    left: "0",
+    right: "0",
+    padding: "14px",
+    background: "#b91c1c",
+    color: "white",
+    fontSize: "14px",
+    fontWeight: "bold",
+    textAlign: "center",
+    zIndex: "999999"
+  });
+
+  document.body.appendChild(banner);
+}
+
+(function aggressiveScan() {
+  const riskScore = getRiskScore();
+  const lookalike = detectLookalikeDomain();
+  const insecurePwd = detectInsecurePassword();
+
+  console.log("🛡 Risk Score:", riskScore);
+
+  if (lookalike) {
+    showWarning(`Possible spoofed domain mimicking ${lookalike}`);
+    return;
+  }
+
+  if (insecurePwd) {
+    showWarning("Password field detected on NON-HTTPS page");
+    return;
+  }
+
+  if (riskScore >= 5) {
+    showWarning("High-risk phishing indicators detected");
+  }
+})();
