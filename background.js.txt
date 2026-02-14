@@ -1,0 +1,27 @@
+// Listen for URL changes
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.status === 'complete' && tab.url) {
+    analyzeURL(tab.url, tabId);
+  }
+});
+
+function analyzeURL(url, tabId) {
+  let score = 0;
+  
+  // 1. Check for IP address instead of domain
+  if (/(\d{1,3}\.){3}\d{1,3}/.test(url)) score += 5;
+  
+  // 2. Check for @ symbol
+  if (url.includes('@')) score += 3;
+  
+  // 3. Shortening services
+  if (url.includes('bit.ly') || url.includes('tinyurl')) score += 2;
+
+  // If score is high, send warning to content script
+  if (score > 4) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "showWarning",
+      reason: "Suspicious URL structure detected."
+    });
+  }
+}

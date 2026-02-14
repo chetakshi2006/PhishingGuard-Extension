@@ -1,0 +1,44 @@
+// Scan page content for phishing signals
+function scanPageContent() {
+  let threats = 0;
+  
+  // 1. Check for hidden frames (Invisible iframes)
+  const iframes = document.getElementsByTagName('iframe');
+  for (let iframe of iframes) {
+    if (iframe.style.display === 'none' || iframe.style.visibility === 'hidden') {
+      threats++;
+    }
+  }
+  
+  // 2. Check for suspicious forms (e.g., action sends data to different domain)
+  const forms = document.getElementsByTagName('form');
+  for (let form of forms) {
+    if (form.action && !form.action.includes(window.location.hostname)) {
+      threats++;
+    }
+  }
+  
+  return threats > 0;
+}
+
+// Receive messages from background script
+chrome.runtime.onMessage.addListener((request) => {
+  if (request.action === "showWarning" || scanPageContent()) {
+    displayWarningBanner(request.reason || "Suspicious page content detected.");
+  }
+});
+
+// UI: Inject warning banner
+function displayWarningBanner(message) {
+  if (document.getElementById('phish-banner')) return;
+  
+  const banner = document.createElement('div');
+  banner.id = 'phish-banner';
+  banner.style.cssText = `
+    position: fixed; top: 0; left: 0; width: 100%; height: 50px;
+    background-color: red; color: white; text-align: center;
+    z-index: 99999; font-size: 20px; padding-top: 10px;
+  `;
+  banner.innerText = `⚠️ WARNING: ${message} DO NOT ENTER CREDENTIALS.`;
+  document.body.prepend(banner);
+}
